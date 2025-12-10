@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  # MongoDB Database Service
+  mongodb:
+    image: mongo:7.0
+    container_name: math-problem-generator-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: math_problem_db
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+      - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    networks:
+      - math-problem-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # MongoDB Express - Optional Web UI for MongoDB Management
+  mongo-express:
+    image: mongo-express:latest
+    container_name: math-problem-generator-mongo-express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: password
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - math-problem-network
+    profiles:
+      - dev
+
+  # Redis Cache - Optional Service for Caching
+  redis:
+    image: redis:7-alpine
+    container_name: math-problem-generator-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - math-problem-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - dev
+      - with-cache
+
+  # Application Service - Optional (uncomment and configure as needed)
+  # app:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: math-problem-generator-app
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     MONGODB_URI: mongodb://admin:password@mongodb:27017/math_problem_db?authSource=admin
+  #     REDIS_URL: redis://redis:6379
+  #   depends_on:
+  #     mongodb:
+  #       condition: service_healthy
+  #   volumes:
+  #     - .:/app
+  #     - /app/node_modules
+  #   networks:
+  #     - math-problem-network
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  math-problem-network:
+    driver: bridge
